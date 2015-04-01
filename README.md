@@ -12,6 +12,6 @@ should be able to integrate other virtualization mechanisms if needed.
 
 Daniel Veillard <veillard@redhat.com>
 
-    **This version lightos forked from libvirt1.2.2
-    And it will intergrated no-hypervisor vitualization technology:Rainforest，Which developed by ICT
-    Email：lzj7179@163.com**
+    **This version lightos forked from libvirt1.2.2**
+    **And it will intergrated no-hypervisor vitualization technology:Rainforest，Which developed by ICT**
+    **Email：lzj7179@163.com**
