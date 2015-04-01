@@ -10,8 +10,11 @@ resources are driven by a Linux instance. The library aim at providing
 long term stable C API initially for the Xen paravirtualization but
 should be able to integrate other virtualization mechanisms if needed.
 
-Daniel Veillard <veillard@redhat.com>
+Daniel Veillard <veillard@redhat.com>.
 
-**This version lightos forked from libvirt1.2.2**
-**And it will intergrated no-hypervisor vitualization technology:Rainforest，Which developed by ICT**
-**Email：lzj7179@163.com**
+_ _ _
+
+
+    This version lightos forked from libvirt1.2.2
+    And it will intergrated no-hypervisor vitualization technology:Rainforest，Which developed by ICT
+    Email：lzj7179@163.com
