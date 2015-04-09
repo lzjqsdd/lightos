@@ -70,11 +70,13 @@
 
 
 lightosConnPtr lightos_driver = NULL;
+
 static virMutex defaultLock;
+
 static int
 lightosOnceInit(void)
 {
-	return virMutexInit(&defaultLock);
+    return virMutexInit(&defaultLock);
 }
 
 VIR_ONCE_GLOBAL_INIT(lightos)
@@ -116,11 +118,15 @@ lightosConnectOpen(virConnectPtr conn,
 		   virConnectAuthPtr auth ATTRIBUTE_UNUSED,
 		   unsigned int flags)
 {
-    //int ret;
     virCheckFlags(VIR_CONNECT_RO, VIR_DRV_OPEN_ERROR);
 
     if (lightosInitialize() < 0)
         return VIR_DRV_OPEN_ERROR;
+
+ //   if(conn->uri == NULL)
+//	if (lightos_driver == NULL)
+//		return VIR_DRV_OPEN_DECLINED;
+    
 
     if (!conn->uri)
         return VIR_DRV_OPEN_DECLINED;
@@ -138,13 +144,21 @@ lightosConnectOpen(virConnectPtr conn,
         return VIR_DRV_OPEN_ERROR;
     }
 
-    if (STREQ(conn->uri->path, "/default"))
-  //      ret = testOpenDefault(conn);
-  	printf("need call lightosOpen\n");
+//    if (STREQ(conn->uri->path, "/default"))
+//        ret = testOpenDefault(conn);
+//  	printf("need call lightosOpen\n");
 
-//    if (ret != VIR_DRV_OPEN_SUCCESS)
-//        return ret;
+    if(lightos_driver == NULL)
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+		"%s",_("lightos state driver is ont active!!!!"));
 
+ //   if (STREQ(conn->uri->path, "/default"))
+  //  {
+//	if(virConnectOpenEnsureACL(conn)< 0)
+ //           return VIR_DRV_OPEN_ERROR;
+   // }
+
+    conn->privateData = lightos_driver;
     return VIR_DRV_OPEN_SUCCESS;
 
 }
@@ -185,18 +199,130 @@ cleanup:
 
 
 
+static int
+lightosStateCleanup(void)
+{
+    VIR_DEBUG("lightos state cleanup");
+
+    if (lightos_driver == NULL)
+        return -1;
+
+    virObjectUnref(lightos_driver->domains);
+    virObjectUnref(lightos_driver->caps);
+    virObjectUnref(lightos_driver->xmlopt);
+
+    virMutexDestroy(&lightos_driver->lock);
+    VIR_FREE(lightos_driver);
+
+    return 0;
+}
+
+
+
+
+static int
+lightosStateInitialize(bool priveleged ATTRIBUTE_UNUSED,
+                     virStateInhibitCallback callback ATTRIBUTE_UNUSED,
+                     void *opaque ATTRIBUTE_UNUSED)
+{
+    if (!priveleged) {
+        VIR_INFO("Not running priveleged, disabling driver");
+        return 0;
+    }
+
+    if (VIR_ALLOC(lightos_driver) < 0) {
+        printf("Alloc lightos_drvier error!\n");
+        return -1;
+    }
+
+    if (virMutexInit(&lightos_driver->lock) < 0) {
+        VIR_FREE(lightos_driver);
+        return -1;
+    }
+
+  //  if (!(lightos_driver->caps = lightosBuildCapabilities()))
+  //      goto cleanup;
+
+    if (!(lightos_driver->xmlopt = virDomainXMLOptionNew(NULL, NULL, NULL)))
+        goto cleanup;
+
+    if (!(lightos_driver->domains = virDomainObjListNew()))
+        goto cleanup;
+
+    if (virFileMakePath(LIGHTOS_LOG_DIR) < 0) {
+        virReportSystemError(errno,
+                             _("Failed to mkdir %s"),
+                             LIGHTOS_LOG_DIR);
+        goto cleanup;
+    }
+
+    if (virFileMakePath(LIGHTOS_STATE_DIR) < 0) {
+        virReportSystemError(errno,
+                             _("Failed to mkdir %s"),
+                             LIGHTOS_LOG_DIR);
+        goto cleanup;
+    }
+
+    if (virDomainObjListLoadAllConfigs(lightos_driver->domains,
+                                       LIGHTOS_CONFIG_DIR,
+                                       NULL, 0,
+                                       lightos_driver->caps,
+                                       lightos_driver->xmlopt,
+                                       1 << VIR_DOMAIN_VIRT_BHYVE,
+                                       NULL, NULL) < 0)
+	goto cleanup;
+    return 0;
+
+cleanup:
+    lightosStateCleanup();
+    return -1;
+}
+
+
+static int lightosConnectGetVersion(virConnectPtr conn ATTRIBUTE_UNUSED,
+				unsigned long *hvVer)
+{
+	*hvVer = 2;
+	return 0;
+}
+
+
+
+static int lightosDomainCreate(virDomianPtr ATTRIBUTE_UNUSED)
+{
+	lightosConnPtr privconn = domain->conn->privateData;
+	virDomainObjPtr privdom;
+
+	virObjectEventPtr event = NULL;
+	
+	virCheckFlags(0,-1);
+	lightosDriverLock(privconn);
+	
+	/*judge wheather the domain was exists*/
+	
+}
+
+
 static virDriver lightosDriver = {
 	.no = VIR_DRV_LIGHTOS,
 	.name = "lightos",
 	.connectOpen = lightosConnectOpen,
 	.connectClose = lightosConnectClose,
 	.domainCreate = lightosDomainCreate,
+	.connectGetVersion = lightosConnectGetVersion,
+};
+
+static virStateDriver lightosStateDriver = {
+	.name="lightos",
+	.stateInitialize = lightosStateInitialize,
+	.stateCleanup = lightosStateCleanup,
 };
 
 int lightosRegister(void){
 	
-	printf("lightosRegister\n");
+	//printf("lightosRegister\n");
 	virRegisterDriver(&lightosDriver);
-	printf("Register!\n");
+	virRegisterStateDriver(&lightosStateDriver);
+	printf("Lightos Register!\n");
 	return 0;
 }

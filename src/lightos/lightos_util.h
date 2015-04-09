@@ -28,7 +28,7 @@
 # include "virthread.h"
 
 # define LIGHTOS_AUTOSTART_DIR    SYSCONFDIR "/libvirt/lightos/autostart"
-# define LIGTHOS_CONFIG_DIR       SYSCONFDIR "/libvirt/lightos"
+# define LIGHTOS_CONFIG_DIR       SYSCONFDIR "/libvirt/lightos"
 # define LIGHTOS_STATE_DIR        LOCALSTATEDIR "/run/libvirt/lightos"
 # define LIGHTOS_LOG_DIR          LOCALSTATEDIR "/log/libvirt/ligthos"
 

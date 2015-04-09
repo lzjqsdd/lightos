@@ -20,6 +20,8 @@ showHypervisorInfo(virConnectPtr conn)
      * allocation or freeing is necessary; it is possible for the call
      * to fail if, for example, there is no connection to a
      * hypervisor, so check what it returns. */
+
+/*
     hvType = virConnectGetType(conn);
     if (!hvType) {
         ret = 1;
@@ -28,6 +30,7 @@ showHypervisorInfo(virConnectPtr conn)
         goto out;
     }
 
+*/
     if (0 != virConnectGetVersion(conn, &hvVer)) {
         ret = 1;
         printf("Failed to get hypervisor version: %s\n",
@@ -40,11 +43,17 @@ showHypervisorInfo(virConnectPtr conn)
     minor = hvVer / 1000;
     release = hvVer % 1000;
 
-    printf("Hypervisor: \"%s\" version: %lu.%lu.%lu\n",
+ /*   printf("Hypervisor: \"%s\" version: %lu.%lu.%lu\n",
            hvType,
            major,
            minor,
            release);
+*/
+	
+    printf("Hypervisor: version: %lu.%lu.%lu\n",
+	major,
+	minor,
+	release);
 
 out:
     return ret;
@@ -125,7 +134,10 @@ main(int argc, char *argv[])
 
     /* virConnectOpenAuth is called here with all default parameters,
      * except, possibly, the URI of the hypervisor. */
-    conn = virConnectOpenAuth(uri, virConnectAuthPtrDefault, 0);
+
+    //conn = virConnectOpenAuth(uri, virConnectAuthPtrDefault, 0);
+    printf("%s\n",uri);
+    conn = virConnectOpen(uri);
 
     if (!conn) {
         ret = 1;
