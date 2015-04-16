@@ -171,6 +171,183 @@ static int lightosConnectClose(virConnectPtr conn)
 }
 
 
+static virDomainPtr
+lightosDomainDefineXML(virConnectPtr conn,const char * xml)
+{
+    lightosConnPtr privconn = conn->privateData;
+    virDomainPtr dom = NULL;
+    virDomainDefPtr def = NULL;
+    virDomainDefPtr oldDef = NULL;
+    virDomainObjPtr vm = NULL;
+
+    if((def = virDomainDefParseString(xml,privconn->caps,privconn->xmlopt,
+                                    1<<VIR_DOMAIN_VIRT_LIGHTOS,
+                                     VIR_DOMAIN_XML_INACTIVE)) == NULL)
+    {
+        goto cleanup;
+    }
+
+    if(!(vm = virDomainObjListAdd(privconn->domains,def,privconn->xmlopt,
+                                0,&olddef)))
+        goto cleanup;
+
+    def = NULL;
+    vm->persistent = 1;
+
+    dom = virGetDomain(conn,vm->def->name,vm->def->uuid);
+    if(dom)
+        dom->id = vm->def->id;
+    if(virDomainSaveConfig(LIGHTOS_CONFIG_DIR,vm->def)<0)
+        goto cleanup;
+
+cleanup:
+    virDomainDefFree(def);
+    virObjectUnlock(vm);
+
+    return dom;
+}
+
+/*
+static int 
+lightosDomainUndefine(virDomainPtr domain)
+{
+    lightosConnPtr privconn = domain->conn->privateData;
+    virDomainObjPtr vm;
+    int ret = -1;
+
+    if(!(vm = lightosDomObjFromDomain(domain)))
+        goto cleanup;
+    if(!vm->persistent){
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                      "%s",_("cannot undefine transient domain"));
+        goto cleanup;
+    }
+
+    if(virDomainDeleteConfig(LIGHTOS_CONFIG_DIR,
+                            LIGHTOS_AUTOSTART_DIR,
+                            vm)<0)
+        goto cleanup;
+
+    if(virDomainObjIsActive(vm)){
+        vm->persistent = 0;
+    }else{
+        virDomainObjListRemove(privconn->domains,vm);
+        vm = NULL;
+    }
+    ret = 0;
+
+cleanup:
+    virObjectUnlock(vm);
+    return ret;
+}
+*/
+
+
+static int
+lightosConnectListDomains(virConnectPtr conn,int *ids,int maxids)
+{
+    lightosConnPtr privconn = conn->privateData;
+    int n;
+
+    n = virDomainObjListGetActiveIDs(privconn->domains,ids,maxids,
+                                     NULL,NULL);
+
+    return n;
+}
+
+
+static int
+lightosConnectNumOfDomains(virConnectPtr conn)
+{
+    lightosConnPtr privconn = conn->privateData;
+    int count;
+    
+    count = virDomainObjListNumOfDomains(privconn->domains,true,NULL,NULL);
+
+    return count;
+}
+
+
+static int 
+lightosConnectListDefinedDomains(virConnectPtr conn,char **const names,int maxnames){
+    
+    lightosConnPtr privconn = conn->privateData;
+    int n;
+
+    memset(names,0,sizeof(*names)*maxnames);
+    n = virDomainObjListGetInactiveNames(privconn->domains,names,maxnames,NULL,NULL);
+
+    return n;
+}
+
+static int
+lightosConnectNumOfDefinedDomains(virConnectPtr conn){
+
+    lightosConnPtr privconn = conn->privateData;
+    int count;
+
+    count = virDomainObjListNumOfDomains(privconn->domains,false,NULL,NULL);
+    return count;
+
+}
+
+static int
+lightosConnectListAllDomains(virConnectPtr conn,virDomainPtr **domains,unsigned int flags){
+    
+    lightosConnPtr privconn = conn->privateData;
+    int ret;
+
+    virCheckFlags(VIR_CONNECT_LIST_DOMAINS_FILTERS_ALL,-1);
+    ret = virDomainObjListExport(privconn->domains,conn,domains,NULL,flags);
+    return ret;
+
+}
+
+static virDomainPtr lightosDomainLookupByUUID(virConnectPtr conn,
+                                             const unsigned char *uuid)
+{
+    lightosConnPtr privconn = conn->privateData;
+    virDomainPtr ret = NULL;
+    virDomainObjPtr dom;
+
+    dom = virDomainObjListFindByUUID(privconn->domains,uuid);
+
+    if(dom == NULL){
+        virReportError(VIR_ERR_NO_DOMAIN,NULL);
+        goto cleanup;
+    }
+    ret = virGetDomain(conn,dom->def->name,dom->def->uuid);
+
+    if(ret){
+        ret->id = dom->def->id;
+    }
+cleanup:
+    if(dom)
+        virObjectUnlock(dom);
+    return ret;
+}
+
+static virDomainPtr lightosDomainLookupByName(virConnectPtr conn,
+                                              const char *name)
+{
+    lightosConnPtr privconn = conn->privateData;
+    virDomainPtr ret = NULL;
+    virDomainObjPtr dom;
+
+    dom = virDomainObjListFindByName(privconn->domains,name);
+    if(dom == NULL){
+        virReportError(VIR_ERR_NO_DOMAIN,NULL);
+        goto cleanup;
+    }
+    ret = virGetDomain(conn,dom->def->name,dom->def->uuid);
+    if(ret)
+        ret->id = dom->def->id;
+
+cleanup:
+    if(dom)
+        virObjectUnlock(dom);
+    return ret;
+}
 
 static int
 lightosDomainCreate(virDomainPtr dom)
@@ -268,7 +445,7 @@ lightosStateInitialize(bool priveleged ATTRIBUTE_UNUSED,
                                        NULL, 0,
                                        lightos_driver->caps,
                                        lightos_driver->xmlopt,
-                                       1 << VIR_DOMAIN_VIRT_BHYVE,
+                                       1 << VIR_DOMAIN_VIRT_LIGHTOS,
                                        NULL, NULL) < 0)
 	goto cleanup;
     return 0;
@@ -288,7 +465,7 @@ static int lightosConnectGetVersion(virConnectPtr conn ATTRIBUTE_UNUSED,
 
 
 
-static int lightosDomainCreate(virDomianPtr ATTRIBUTE_UNUSED)
+static int lightosDomainCreate(virDomainPtr ATTRIBUTE_UNUSED)
 {
 	lightosConnPtr privconn = domain->conn->privateData;
 	virDomainObjPtr privdom;
@@ -310,6 +487,13 @@ static virDriver lightosDriver = {
 	.connectClose = lightosConnectClose,
 	.domainCreate = lightosDomainCreate,
 	.connectGetVersion = lightosConnectGetVersion,
+    .connectListDomains = lightosConnectListDomains,
+    .connectListAllDomains = lightosConnectListAllDomains,
+    .connectNumOfDomains = lightosConnectNumOfDomains,
+    .connectNumofDefinedDomains = lightosConnectNumOfDefinedDomains,
+    .domainDefineXML = lightosDomainDefineXML,
+    .domainLookupByUUID = lightosDomainLookupByUUID,
+    .domainLookupByName = lightosDomainLookupByName,
 };
 
 static virStateDriver lightosStateDriver = {
